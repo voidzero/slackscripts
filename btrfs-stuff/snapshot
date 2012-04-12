@@ -1,0 +1,61 @@
+#!/bin/zsh -e
+# vim: ft=zsh ts=4 sw=4 et
+
+# Create snapshot of ../__active and its subvolumes
+
+mksnap() {
+    local snapshot=${$(date +%F-%X)//:/} 
+    local snapdirs
+    btrfs sub list ../__active 2>&1 | while read line; do
+        [[ $line == *'__active/'* ]] && snapdirs+=(${(@)line[(w)7]/__active\//}) || :
+    done
+
+    set -v
+    btrfs sub snap ../__active $snapshot
+    set +v
+    for dir ($snapdirs) {
+        set -v
+        rmdir ${snapshot}/${dir} && btrfs sub snap ../__active/${dir} ${snapshot}/${dir}
+        set +v
+    }
+}
+
+delsnap() {
+    local snapshot=$1
+    local snapdirs
+    if [[ -d $snapshot ]]; then
+        btrfs sub list $snapshot 2>&1 | while read line; do
+            [[ $line == *"${snapshot}/"* ]] && snapdirs+=(${(@)line[(w)7]##*/}) || :
+        done
+
+        local answer
+        for i (${(@)snapdirs}) echo ">>$i<<"
+        print "Ready to destroy ${snapshot} and its subdirs ${(j:, :)snapdirs[1,-2]#, } and ${snapdirs[-1]}."
+        print -n "Continue? [y/n]"
+        read -q answer
+        print
+        [[ ${answer:l} == ("y"|"yes") ]] || { print "Bailing out." >&2; exit 1 }
+
+        for dir ($snapdirs) {
+            set -v
+            btrfs sub del ${snapshot}/${dir}
+            set +v
+        }
+        btrfs sub del $snapshot
+    else
+        print "Error: $snapshot does not exist." >&2
+        exit 1
+    fi
+}
+
+usage() {
+    print "Usage: $0 [create | remove snapshot-dir]" >&2
+}
+
+
+case $1 in
+    create) [[ -z $2 ]] && { mksnap } || usage ;;
+    remove) [[ -n $2 ]] && { delsnap $2 } || usage ;;
+    *) usage;;
+esac
+

@@ -1,0 +1,87 @@
+#!/bin/zsh
+
+# List btrfs snapshots in this dir and its subdirs.
+
+if tput setaf 0 &>/dev/null; then
+	C_CLEAR=$(tput sgr0)                      # clear text
+	C_MAIN=${C_CLEAR}$(tput bold)        # main text
+	C_OTHER=${C_MAIN}$(tput setaf 4)     # prefix & brackets
+	C_SEPARATOR=${C_MAIN}$(tput setaf 0) # separator
+	C_BUSY=${C_CLEAR}$(tput setaf 6)     # busy
+	C_FAIL=${C_MAIN}$(tput setaf 1)      # failed
+	C_DONE=${C_MAIN}                          # completed
+	C_BKGD=${C_MAIN}$(tput setaf 5)      # backgrounded
+	C_H1=${C_MAIN}                            # highlight text 1
+	C_H2=${C_MAIN}$(tput setaf 6)        # highlight text 2
+	C_BLINK=$(tput blink)
+else
+	C_CLEAR="\e[m"          # clear text
+	C_MAIN="\e[;1m"         # main text
+	C_OTHER="\e[1;34m"      # prefix & brackets
+	C_SEPARATOR="\e[1;30m"  # separator
+	C_BUSY="\e[;36m"        # busy
+	C_FAIL="\e[1;31m"       # failed
+	C_DONE=${C_MAIN}        # completed
+	C_BKGD="\e[1;35m"       # backgrounded
+	C_H1=${C_MAIN}          # highlight text 1
+	C_H2="\e[1;36m"         # highlight text 2
+	C_BLINK="\e[1;31;25m"
+fi
+
+linesep() {
+	if [[ -z $1 ]]
+	then
+		print -- "${C_H1}───────────────────────────────────────────────────${C_CLEAR}"
+	elif [[ $1 == "top" ]]
+	then
+		print -- "                    ${C_H1}┌─${C_H2}SNAPSHOTS${C_CLEAR}${C_H1}─┐${C_CLEAR}                  "
+		print -- "${C_H1}┌───────────────────┴───────────┴─────────────────┐${C_CLEAR}"
+	elif [[ $1 == "mid" ]]
+	then
+		print -- "${C_H1}├─────────────────────────────────────────────────┤${C_CLEAR}"
+	elif [[ $1 == "bot" ]]
+	then
+		print -- "${C_H1}└─────────────────────────────────────────────────┘${C_CLEAR}"
+	fi
+}
+
+dirs=(*(/))
+
+print
+linesep top
+for i (${^dirs}/__snapshots/*(N/)) {
+	host=${${(@s./.)i}[1]}
+	snap=${${(@s./.)i}[3]}
+	if (( ( ${#host} / 7 ) == 1 ))
+	then
+		tabs="\t"
+	else
+		tabs="\t\t"
+	fi
+
+	if  [[ $prevhost == $host ]]
+	then
+		print "${C_H1}│${C_CLEAR} \t${tabs}          ${C_MAIN}${snap}${C_CLEAR} ${C_H1}│${C_CLEAR}"
+	else
+		[[ -n $prevhost ]] && linesep mid
+		print "${C_H1}│${C_CLEAR} ${C_BUSY}Host:${C_CLEAR} ${C_OTHER}${host}${C_CLEAR}${tabs}${C_BUSY}Snapshot:${C_CLEAR} ${C_MAIN}${snap}${C_CLEAR} ${C_H1}│${C_CLEAR}"
+	fi
+	prevhost=${host}
+}
+for host (${dirs}) {
+	check=(${host}/__snapshots/*(N/))
+	if (( ( ${#host} / 7 ) == 1 ))
+	then
+		tabs="\t"
+	else
+		tabs="\t\t"
+	fi
+
+	if [[ -z $check ]]
+	then
+		[[ -n $prevhost ]] && linesep mid
+		print "${C_H1}│${C_CLEAR} ${C_BUSY}Host:${C_CLEAR} ${C_OTHER}${host}${C_CLEAR}${tabs}${C_BUSY}Snapshot:${C_CLEAR}      ${C_FAIL}${C_BLINK}NONE${C_BLINK}${C_CLEAR}       ${C_H1}│${C_CLEAR}"
+	fi
+}
+linesep bot
+print
