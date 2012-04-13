@@ -4,18 +4,23 @@
 # Create snapshot of ../__active and its subvolumes
 
 mksnap() {
-    local snapshot=${$(date +%F-%X)//:/} 
+    local snapshot=${(I:3:)${"$(date +%F-%X)"[0,-3]//:/}/-/.}
     local snapdirs
+    typeset -a thisdir
+    thisdir=${PWD:h:t}
     btrfs sub list ../__active 2>&1 | while read line; do
-        [[ $line == *'__active/'* ]] && snapdirs+=(${(@)line[(w)7]/__active\//}) || :
+        [[ $line == */$thisdir/'__active/'* ]] && snapdirs+=(${(@)line[(w)7]/__active\//}) || :
     done
 
     set -v
-    btrfs sub snap ../__active $snapshot
+    $PRECMD btrfs sub snap ../__active $snapshot
+    sleep 1s
     set +v
     for dir ($snapdirs) {
+        dir=${${dir}#roots/${thisdir}/}
         set -v
-        rmdir ${snapshot}/${dir} && btrfs sub snap ../__active/${dir} ${snapshot}/${dir}
+        $PRECMD rmdir ${snapshot}/${dir} && \
+            $PRECMD btrfs sub snap ../__active/${dir} ${snapshot}/${dir}
         set +v
     }
 }
@@ -23,25 +28,33 @@ mksnap() {
 delsnap() {
     local snapshot=$1
     local snapdirs
+    typeset -a thisdir
+    thisdir=${PWD:h:t}
     if [[ -d $snapshot ]]; then
         btrfs sub list $snapshot 2>&1 | while read line; do
-            [[ $line == *"${snapshot}/"* ]] && snapdirs+=(${(@)line[(w)7]##*/}) || :
+            [[ $line == */${snapshot}/* ]] && snapdirs+=(${(@)line[(w)7]##*/}) || :
         done
 
         local answer
-        for i (${(@)snapdirs}) echo ">>$i<<"
-        print "Ready to destroy ${snapshot} and its subdirs ${(j:, :)snapdirs[1,-2]#, } and ${snapdirs[-1]}."
-        print -n "Continue? [y/n]"
-        read -q answer
-        print
-        [[ ${answer:l} == ("y"|"yes") ]] || { print "Bailing out." >&2; exit 1 }
-
+        for i (${(@)snapdirs}) print ">>$i<<"
+        if [[ -z $PRECMD ]]; then
+            local subdirs=${(j:, :)snapdirs[1,-2]#, }
+            if [[ -z $subdirs ]]; then
+                print "Host: ${thisdir}\nReady to destroy ${snapshot} (no subsnaps found)."
+            else
+                print "Host: ${thisdir}\nReady to destroy ${snapshot} and its subdirs ${(j:, :)snapdirs[1,-2]#, } and ${snapdirs[-1]}."
+            fi
+            print -n "Continue? [y/n] "
+            read -q answer
+            print
+            [[ ${answer:l} == ("y"|"yes") ]] || { print "Bailing out." >&2; print; exit 1 }
+        fi
         for dir ($snapdirs) {
             set -v
-            btrfs sub del ${snapshot}/${dir}
+            $PRECMD btrfs sub del ${snapshot}/${dir}
             set +v
         }
-        btrfs sub del $snapshot
+        $PRECMD btrfs sub del $snapshot
     else
         print "Error: $snapshot does not exist." >&2
         exit 1
@@ -49,9 +62,16 @@ delsnap() {
 }
 
 usage() {
-    print "Usage: $0 [create | remove snapshot-dir]" >&2
+    print "Usage: $0 [-n] [create | remove snapshot-dir]" >&2
 }
 
+print
+
+if [[ $1 == "-n" ]]; then
+    typeset -g PRECMD="echo"
+    print "Attention: This is what will be done if you don't specify -n:"
+    shift
+fi
 
 case $1 in
     create) [[ -z $2 ]] && { mksnap } || usage ;;
@@ -59,3 +79,5 @@ case $1 in
     *) usage;;
 esac
 
+print
+exit 0
