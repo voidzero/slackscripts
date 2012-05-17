@@ -1,0 +1,31 @@
+#!/bin/sh
+# PROVIDE: sshguard
+# REQUIRE: DAEMON syslogd
+# BEFORE: LOGIN
+# KEYWORD: shutdown
+#
+# Add the following line to /etc/rc.conf to enable SSHguard:
+#  sshguard_enable="YES"
+#
+# Optional lines to change the configuration
+#  sshguard_flags="-a 40 -p 420 -s 1200"
+#  sshguard_logfile="/var/log/auth.log"
+#  sshguard_whitelist="-w /usr/local/etc/sshguard.whitelist"
+
+. /etc/rc.subr
+
+# Set some defaults
+sshguard_enable=${sshguard_enable:-"NO"}
+sshguard_flags=${sshguard_flags:-"-a 40 -p 420 -s 1200"}
+sshguard_logfile=${sshguard_logfile:-"/var/log/auth.log"}
+sshguard_whitelist=${sshguard_whitelist:-"/etc/ssh/friends"}
+
+name=sshguard
+rcvar=`set_rcvar`
+load_rc_config $name
+command=/usr/local/sbin/sshguard
+pidfile=/var/run/sshguard.pid
+command_args="-i ${pidfile} -l ${sshguard_logfile} ${sshguard_whitelist} &"
+
+run_rc_command "$1"
+
