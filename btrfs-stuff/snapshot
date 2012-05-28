@@ -9,7 +9,7 @@ mksnap() {
     typeset -a thisdir
     thisdir=${PWD:h:t}
     btrfs sub list ../__active 2>&1 | while read line; do
-        [[ $line == */$thisdir/'__active/'* ]] && snapdirs+=(${(@)line[(w)7]/__active\//}) || :
+        [[ $line == *__active?* ]] && snapdirs+=(${(@)line[(w)7]/__active\//}) || :
     done
 
     set -v
